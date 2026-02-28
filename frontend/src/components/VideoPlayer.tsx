@@ -12,8 +12,10 @@ import {
     ArrowLeft,
     SkipBack,
     SkipForward,
+    Sparkles,
 } from "lucide-react";
 import { ContentItem } from "@/lib/mockData";
+import AlternativeEnding from "@/components/AlternativeEnding";
 
 interface VideoPlayerProps {
     content: ContentItem;
@@ -38,6 +40,9 @@ export default function VideoPlayer({
     const [videoDuration, setVideoDuration] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [videoReady, setVideoReady] = useState(false);
+    const [showAltEnding, setShowAltEnding] = useState(false);
+    const [videoEnded, setVideoEnded] = useState(false);
+    const [altVideoUrl, setAltVideoUrl] = useState<string | null>(null);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -203,6 +208,25 @@ export default function VideoPlayer({
         return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
     };
 
+    const handlePlayAlternative = (url: string) => {
+        setAltVideoUrl(url);
+        setShowAltEnding(false);
+        setVideoEnded(false);
+        setIsPlaying(false);
+        // The alt video will load via its own element
+    };
+
+    const handleAltVideoPlay = () => {
+        const altVideo = document.getElementById("alt-video") as HTMLVideoElement;
+        if (altVideo) {
+            altVideo.play().catch(() => {});
+        }
+    };
+
+    const handleCloseAltVideo = () => {
+        setAltVideoUrl(null);
+    };
+
     const getCostColor = () => {
         if (minutesUsed > 30) return "text-red-400";
         if (minutesUsed > 10) return "text-yellow-400";
@@ -222,7 +246,10 @@ export default function VideoPlayer({
                 className="absolute inset-0 w-full h-full object-contain bg-black"
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
-                onEnded={() => setIsPlaying(false)}
+                onEnded={() => {
+                    setIsPlaying(false);
+                    setVideoEnded(true);
+                }}
                 playsInline
                 preload="auto"
             />
@@ -360,9 +387,19 @@ export default function VideoPlayer({
                         </span>
                     </div>
 
-                    {/* Center: Title */}
-                    <div className="text-center hidden md:block">
+                    {/* Center: Title + AI Button */}
+                    <div className="text-center hidden md:flex items-center gap-3">
                         <h3 className="text-white font-medium text-sm">{content.title}</h3>
+                        <button
+                            onClick={() => setShowAltEnding(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#836ef9]/20 hover:bg-[#836ef9]/30 border border-[#836ef9]/40 rounded-full transition-all cursor-pointer group"
+                            title="AI Alternatif Son"
+                        >
+                            <Sparkles className="h-3.5 w-3.5 text-[#836ef9] group-hover:text-[#a58aff] transition-colors" />
+                            <span className="text-xs text-[#836ef9] group-hover:text-[#a58aff] font-medium transition-colors">
+                                AI Son
+                            </span>
+                        </button>
                     </div>
 
                     {/* Right: Session Cost + Fullscreen */}
@@ -421,6 +458,76 @@ export default function VideoPlayer({
                             -1 dk/dk
                         </span>
                     </div>
+                </div>
+            )}
+
+            {/* Video Ended Overlay - AI Ending Prompt */}
+            {videoEnded && !showAltEnding && !altVideoUrl && (
+                <div className="absolute inset-0 z-30 bg-black/70 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-5 text-center px-6">
+                        <Sparkles className="h-10 w-10 text-[#836ef9]" />
+                        <h3 className="text-xl font-bold text-white">
+                            Video sona erdi!
+                        </h3>
+                        <p className="text-sm text-white/50 max-w-sm">
+                            Bu hikayeyi farklı bir sonla tekrar canlandırmak ister misin?
+                            AI ile alternatif bir final oluştur.
+                        </p>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowAltEnding(true)}
+                                className="flex items-center gap-2 px-6 py-3 bg-[#836ef9] hover:bg-[#7258e8] text-white font-semibold rounded-lg transition-all cursor-pointer shadow-[0_0_30px_rgba(131,110,249,0.3)]"
+                            >
+                                <Sparkles className="h-4 w-4" />
+                                AI Alternatif Son
+                            </button>
+                            <button
+                                onClick={handleClose}
+                                className="px-6 py-3 bg-white/10 hover:bg-white/15 text-white/70 rounded-lg transition-all cursor-pointer"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Alternative Ending Modal */}
+            {showAltEnding && (
+                <AlternativeEnding
+                    videoUrl={content.videoUrl}
+                    contentTitle={content.title}
+                    onPlayAlternative={handlePlayAlternative}
+                    onClose={() => setShowAltEnding(false)}
+                />
+            )}
+
+            {/* Alternative Video Player Overlay */}
+            {altVideoUrl && (
+                <div className="absolute inset-0 z-[120] bg-black flex flex-col">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleCloseAltVideo}
+                                className="flex items-center gap-2 text-white/80 hover:text-white transition-colors cursor-pointer"
+                            >
+                                <ArrowLeft className="h-5 w-5" />
+                                <span className="text-sm">Orijinal Videoya Dön</span>
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-2 bg-[#836ef9]/20 border border-[#836ef9]/40 rounded-full px-3 py-1">
+                            <Sparkles className="h-3.5 w-3.5 text-[#836ef9]" />
+                            <span className="text-xs text-[#836ef9] font-medium">AI Alternatif Son</span>
+                        </div>
+                    </div>
+                    <video
+                        id="alt-video"
+                        src={altVideoUrl}
+                        className="w-full h-full object-contain"
+                        controls
+                        autoPlay
+                        playsInline
+                    />
                 </div>
             )}
 
