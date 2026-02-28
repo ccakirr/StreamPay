@@ -119,7 +119,7 @@ export default function ContentRow({ title, items, onPlay }: ContentRowProps) {
                                             {item.category}
                                         </span>
                                         <span className="text-[10px] text-[#836ef9] font-mono">
-                                            {item.costPerSecond} MON/sec
+                                            1 dk/dk
                                         </span>
                                     </div>
                                 </div>

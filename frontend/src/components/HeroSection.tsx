@@ -56,7 +56,7 @@ export default function HeroSection({ content, onPlay, onMoreInfo }: HeroSection
                         <span className="border border-white/20 px-1.5 py-0.5 text-xs rounded">HD</span>
                         <span>{content.duration}</span>
                         <span className="text-[#836ef9] font-mono text-xs">
-                            {content.costPerSecond} MON/sec
+                            Dakikalık izleme
                         </span>
                     </div>
 

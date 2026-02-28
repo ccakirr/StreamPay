@@ -17,8 +17,12 @@ export default function TransactionsPage({ sessions }: TransactionsPageProps) {
         : sessions.filter((s) => s.status === filter);
 
     const totalSpent = sessions
-        .filter((s) => s.status === "completed")
-        .reduce((sum, s) => sum + s.totalCost, 0);
+        .filter((s) => s.status === "completed" && s.type === "watch")
+        .reduce((sum, s) => sum + s.minutesUsed, 0);
+
+    const totalPurchased = sessions
+        .filter((s) => s.status === "completed" && s.type === "purchase")
+        .reduce((sum, s) => sum + s.minutesUsed, 0);
 
     const totalWatchTime = sessions.reduce((sum, s) => sum + s.totalSeconds, 0);
 
@@ -46,7 +50,7 @@ export default function TransactionsPage({ sessions }: TransactionsPageProps) {
         <div className="px-6 lg:px-12 pt-24 pb-20">
             <h1 className="text-3xl font-bold text-white mb-2">Transactions</h1>
             <p className="text-white/40 text-sm mb-8">
-                All your watch session payments on Monad Testnet
+                Tüm izleme oturumlarınız ve dakika yüklemeleriniz
             </p>
 
             {/* Stats Cards */}
@@ -55,14 +59,29 @@ export default function TransactionsPage({ sessions }: TransactionsPageProps) {
                     <div className="flex items-center gap-2 mb-3">
                         <Zap className="h-4 w-4 text-[#836ef9]" />
                         <span className="text-xs text-white/40 uppercase tracking-wider">
-                            Total Spent
+                            Kullanılan Dakika
                         </span>
                     </div>
                     <div className="flex items-baseline gap-1.5">
                         <span className="text-2xl font-bold font-mono text-white">
-                            {totalSpent.toFixed(4)}
+                            {totalSpent.toFixed(1)}
                         </span>
-                        <span className="text-sm text-white/40">MON</span>
+                        <span className="text-sm text-white/40">dk</span>
+                    </div>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                        <TrendingUp className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs text-white/40 uppercase tracking-wider">
+                            Yüklenen Dakika
+                        </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-bold font-mono text-emerald-400">
+                            {totalPurchased.toFixed(0)}
+                        </span>
+                        <span className="text-sm text-white/40">dk</span>
                     </div>
                 </div>
 
@@ -70,7 +89,7 @@ export default function TransactionsPage({ sessions }: TransactionsPageProps) {
                     <div className="flex items-center gap-2 mb-3">
                         <Clock className="h-4 w-4 text-[#836ef9]" />
                         <span className="text-xs text-white/40 uppercase tracking-wider">
-                            Total Watch Time
+                            Toplam İzleme
                         </span>
                     </div>
                     <div className="text-2xl font-bold font-mono text-white">
@@ -82,7 +101,7 @@ export default function TransactionsPage({ sessions }: TransactionsPageProps) {
                     <div className="flex items-center gap-2 mb-3">
                         <TrendingUp className="h-4 w-4 text-[#836ef9]" />
                         <span className="text-xs text-white/40 uppercase tracking-wider">
-                            Transactions
+                            İşlemler
                         </span>
                     </div>
                     <div className="text-2xl font-bold font-mono text-white">
@@ -195,10 +214,10 @@ export default function TransactionsPage({ sessions }: TransactionsPageProps) {
                                 </div>
 
                                 <div className="text-right flex-shrink-0">
-                                    <div className="text-lg font-bold font-mono text-[#836ef9]">
-                                        -{session.totalCost.toFixed(4)}
+                                    <div className={`text-lg font-bold font-mono ${session.type === "purchase" ? "text-emerald-400" : "text-[#836ef9]"}`}>
+                                        {session.type === "purchase" ? "+" : "-"}{session.minutesUsed.toFixed(1)}
                                     </div>
-                                    <div className="text-xs text-white/30">MON</div>
+                                    <div className="text-xs text-white/30">dakika</div>
                                 </div>
                             </div>
                         </div>

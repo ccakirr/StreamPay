@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Zap, Search, Bell, ChevronDown, Wallet, Clock, ExternalLink } from "lucide-react";
+import { Zap, Search, Bell, ChevronDown, Wallet, Clock, ExternalLink, Plus, Timer } from "lucide-react";
 import { WatchSession } from "@/lib/web3";
 import { shortenHash } from "@/lib/mockData";
 
@@ -9,6 +9,8 @@ export type ViewType = "home" | "series" | "films" | "new" | "transactions";
 
 interface TopBarProps {
     balance: number;
+    minuteBalance: number;
+    walletBalance: number;
     isLoggedIn: boolean;
     walletAddress: string | null;
     onLogin: () => void;
@@ -17,10 +19,13 @@ interface TopBarProps {
     onNavigate: (view: ViewType) => void;
     onSearchOpen: () => void;
     sessions: WatchSession[];
+    onBuyMinutes: () => void;
 }
 
 export default function TopBar({
     balance,
+    minuteBalance,
+    walletBalance,
     isLoggedIn,
     walletAddress,
     onLogin,
@@ -29,6 +34,7 @@ export default function TopBar({
     onNavigate,
     onSearchOpen,
     sessions,
+    onBuyMinutes,
 }: TopBarProps) {
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
@@ -121,6 +127,24 @@ export default function TopBar({
                                 <Search className="h-5 w-5" />
                             </button>
 
+                            {/* Minute Balance + Buy Button */}
+                            <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 bg-[#836ef9]/10 border border-[#836ef9]/30 rounded-full px-3 py-1.5">
+                                    <Timer className="h-3.5 w-3.5 text-[#836ef9]" />
+                                    <span className="text-sm font-mono font-semibold text-white">
+                                        {minuteBalance.toFixed(1)}
+                                    </span>
+                                    <span className="text-[10px] text-white/40">dk</span>
+                                </div>
+                                <button
+                                    onClick={onBuyMinutes}
+                                    className="w-7 h-7 rounded-full bg-[#836ef9] hover:bg-[#7258e8] flex items-center justify-center transition-colors cursor-pointer"
+                                    title="Dakika Yükle"
+                                >
+                                    <Plus className="h-3.5 w-3.5 text-white" />
+                                </button>
+                            </div>
+
                             {/* Notifications Bell */}
                             <div className="relative" ref={notifRef}>
                                 <button
@@ -158,7 +182,7 @@ export default function TopBar({
                                                                 {session.contentTitle}
                                                             </span>
                                                             <span className="text-[10px] text-[#836ef9] font-mono flex-shrink-0 ml-2">
-                                                                -{session.totalCost.toFixed(3)} MON
+                                                                {session.type === "purchase" ? `+${session.minutesUsed} dk` : `-${session.minutesUsed.toFixed(1)} dk`}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center gap-2 text-[10px] text-white/30">
@@ -215,14 +239,20 @@ export default function TopBar({
                                             <div className="flex items-center gap-2 mb-2">
                                                 <Wallet className="h-4 w-4 text-[#836ef9]" />
                                                 <span className="text-xs text-white/50 uppercase tracking-wider">
-                                                    Wallet Balance
+                                                    Dakika Bakiyesi
                                                 </span>
                                             </div>
                                             <div className="flex items-baseline gap-1.5">
                                                 <span className="text-xl font-bold font-mono text-white">
-                                                    {balance.toFixed(4)}
+                                                    {minuteBalance.toFixed(1)}
                                                 </span>
-                                                <span className="text-xs text-white/40">MON</span>
+                                                <span className="text-xs text-white/40">dakika</span>
+                                            </div>
+                                            <div className="flex items-baseline gap-1 mt-1">
+                                                <span className="text-xs font-mono text-white/30">
+                                                    {walletBalance.toFixed(4)}
+                                                </span>
+                                                <span className="text-[10px] text-white/20">MON</span>
                                             </div>
                                             {walletAddress && (
                                                 <div className="mt-1 text-[10px] font-mono text-white/30 truncate">
@@ -232,11 +262,20 @@ export default function TopBar({
                                             <div className="mt-2 h-1 bg-white/5 rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-gradient-to-r from-[#836ef9] to-[#6246ea] rounded-full transition-all duration-500"
-                                                    style={{ width: `${Math.max((balance / 10) * 100, 0)}%` }}
+                                                    style={{ width: `${Math.min((minuteBalance / 120) * 100, 100)}%` }}
                                                 />
                                             </div>
                                         </div>
                                         <div className="p-2">
+                                            <button
+                                                onClick={() => {
+                                                    onBuyMinutes();
+                                                    setProfileOpen(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-sm text-[#836ef9] hover:bg-white/5 rounded transition-colors cursor-pointer font-medium"
+                                            >
+                                                Dakika Yükle
+                                            </button>
                                             <button
                                                 onClick={() => {
                                                     onNavigate("transactions");

@@ -1,5 +1,13 @@
 import { BrowserProvider, Contract, parseEther, formatEther } from "ethers";
-import { COST_PER_SECOND } from "./mockData";
+import { recordMinutePurchase, recordWatchSession } from "./monoracle";
+import {
+    getMinuteBalance,
+    setMinuteBalance,
+    addMinutesToBalance,
+    recordTransaction,
+    getTransactions,
+    type TransactionRecord,
+} from "./supabase";
 
 // ─── Monad Testnet Configuration ───
 export const MONAD_TESTNET = {
@@ -60,10 +68,12 @@ export interface WatchSession {
     startTime: number;
     endTime?: number;
     totalSeconds: number;
-    totalCost: number;
+    minutesUsed: number;
     txHash: string;
     status: "active" | "completed" | "pending" | "failed";
     explorerUrl?: string;
+    monoracleContract?: string;
+    type: "purchase" | "watch";
 }
 
 export interface WalletState {
@@ -85,6 +95,73 @@ declare global {
     }
 }
 
+// ─── Minute Balance (Supabase) ───
+
+/**
+ * Get minute balance from Supabase.
+ * Falls back to localStorage if Supabase fails.
+ */
+export async function getStoredMinuteBalance(walletAddress: string): Promise<number> {
+    try {
+        const balance = await getMinuteBalance(walletAddress);
+        return balance;
+    } catch (err) {
+        console.error("Supabase getMinuteBalance failed, falling back to localStorage:", err);
+        if (typeof window === "undefined") return 0;
+        const key = `streampay_minute_balance_${walletAddress.toLowerCase()}`;
+        const stored = localStorage.getItem(key);
+        return stored ? parseFloat(stored) : 0;
+    }
+}
+
+/**
+ * Set minute balance in Supabase (+ localStorage as cache).
+ */
+export async function setStoredMinuteBalance(walletAddress: string, minutes: number): Promise<void> {
+    // Always update localStorage as cache
+    if (typeof window !== "undefined") {
+        const key = `streampay_minute_balance_${walletAddress.toLowerCase()}`;
+        localStorage.setItem(key, minutes.toFixed(4));
+    }
+    try {
+        await setMinuteBalance(walletAddress, minutes);
+    } catch (err) {
+        console.error("Supabase setMinuteBalance failed:", err);
+    }
+}
+
+/**
+ * Load past transactions from Supabase.
+ */
+export async function loadTransactionsFromDB(walletAddress: string): Promise<WatchSession[]> {
+    try {
+        const rows = await getTransactions(walletAddress);
+        return rows.map(txToSession);
+    } catch (err) {
+        console.error("Supabase loadTransactions failed:", err);
+        return [];
+    }
+}
+
+/** Convert a Supabase TransactionRecord to a WatchSession */
+function txToSession(tx: TransactionRecord): WatchSession {
+    return {
+        contentId: tx.content_id || "",
+        contentTitle: tx.content_title,
+        startTime: new Date(tx.created_at || Date.now()).getTime(),
+        endTime: tx.type === "watch"
+            ? new Date(tx.created_at || Date.now()).getTime() + tx.seconds_watched * 1000
+            : undefined,
+        totalSeconds: tx.seconds_watched,
+        minutesUsed: Number(tx.minutes_amount),
+        txHash: tx.tx_hash || "",
+        status: tx.status as WatchSession["status"],
+        explorerUrl: tx.explorer_url || undefined,
+        monoracleContract: tx.monoracle_contract || undefined,
+        type: tx.type as "purchase" | "watch",
+    };
+}
+
 // ─── Wallet Functions ───
 
 export function isMetaMaskInstalled(): boolean {
@@ -96,7 +173,6 @@ export async function connectWallet(): Promise<WalletState> {
         throw new Error("MetaMask is not installed. Please install MetaMask to use StreamPay.");
     }
 
-    // Request account access
     const accounts = (await window.ethereum.request({
         method: "eth_requestAccounts",
     })) as string[];
@@ -105,10 +181,8 @@ export async function connectWallet(): Promise<WalletState> {
         throw new Error("No accounts found. Please unlock MetaMask.");
     }
 
-    // Switch to Monad Testnet
     await switchToMonadTestnet();
 
-    // Get balance
     const balance = await getWalletBalance(accounts[0]);
 
     return {
@@ -128,7 +202,6 @@ export async function switchToMonadTestnet(): Promise<void> {
             params: [{ chainId: MONAD_TESTNET.chainId }],
         });
     } catch (switchError: unknown) {
-        // Chain not added yet, add it
         if ((switchError as { code: number }).code === 4902) {
             await window.ethereum.request({
                 method: "wallet_addEthereumChain",
@@ -158,17 +231,16 @@ export async function getWalletBalance(address: string): Promise<number> {
 
 export async function disconnectWallet(): Promise<void> {
     // MetaMask doesn't have a programmatic disconnect
-    // We just clear local state
 }
 
-// ─── Contract Interaction ───
+// ─── Buy Minutes (Contract Payment) ───
 
 /**
- * Call pay() on the StreamPay contract with the accumulated session cost.
- * This sends real MON on Monad Testnet.
+ * Buy minutes by sending MON to the StreamPay contract.
+ * Returns the tx hash and explorer URL.
  */
-export async function sendSessionPayment(
-    amountMON: number
+export async function buyMinutesOnChain(
+    costMON: number
 ): Promise<{ txHash: string; explorerUrl: string }> {
     if (!window.ethereum) {
         throw new Error("MetaMask not found");
@@ -176,16 +248,10 @@ export async function sendSessionPayment(
 
     const provider = new BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
-
     const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-    // Convert MON amount to wei
-    const amountWei = parseEther(amountMON.toFixed(18));
-
-    // Call pay() with the MON value
+    const amountWei = parseEther(costMON.toFixed(18));
     const tx = await contract.pay({ value: amountWei });
-
-    // Wait for confirmation
     const receipt = await tx.wait();
 
     const txHash = receipt.hash;
@@ -194,17 +260,95 @@ export async function sendSessionPayment(
     return { txHash, explorerUrl };
 }
 
+/**
+ * Full buy minutes flow:
+ * 1. Send MON payment to contract
+ * 2. Record purchase on Monoracle
+ * 3. Update local minute balance
+ */
+export async function buyMinutes(
+    walletAddress: string,
+    minutes: number,
+    costMON: number
+): Promise<WatchSession> {
+    const session: WatchSession = {
+        contentId: "",
+        contentTitle: `${minutes} Dakika Yükleme`,
+        startTime: Date.now(),
+        totalSeconds: 0,
+        minutesUsed: minutes,
+        txHash: "",
+        status: "pending",
+        type: "purchase",
+    };
+
+    try {
+        // 1. Send MON to contract
+        const { txHash, explorerUrl } = await buyMinutesOnChain(costMON);
+        session.txHash = txHash;
+        session.explorerUrl = explorerUrl;
+
+        // 2. Update balance in Supabase
+        const newBalance = await addMinutesToBalance(walletAddress, minutes);
+        // Also update localStorage cache
+        if (typeof window !== "undefined") {
+            localStorage.setItem(
+                `streampay_minute_balance_${walletAddress.toLowerCase()}`,
+                newBalance.toFixed(4)
+            );
+        }
+
+        // 3. Record transaction in Supabase
+        recordTransaction({
+            wallet_address: walletAddress,
+            type: "purchase",
+            content_id: null,
+            content_title: `${minutes} Dakika Yükleme`,
+            minutes_amount: minutes,
+            cost_mon: costMON,
+            tx_hash: txHash,
+            explorer_url: explorerUrl,
+            monoracle_contract: null,
+            seconds_watched: 0,
+            remaining_balance: newBalance,
+            status: "completed",
+        }).catch(console.error);
+
+        // 4. Record on Monoracle (fire-and-forget)
+        recordMinutePurchase({
+            walletAddress,
+            minutes,
+            costMON,
+            paymentTxHash: txHash,
+        }).then((result) => {
+            if (result.success && result.contractAddress) {
+                session.monoracleContract = result.contractAddress;
+            }
+        }).catch(console.error);
+
+        session.status = "completed";
+    } catch (error) {
+        console.error("Buy minutes failed:", error);
+        session.status = "failed";
+        session.txHash = "FAILED";
+    }
+
+    return session;
+}
+
 // ─── Session Management ───
 
 /**
- * End a watching session and send the on-chain payment.
- * Returns a WatchSession with real tx hash.
+ * End a watching session.
+ * Records the session on Monoracle (no additional MON payment - already paid for minutes).
  */
 export async function endWatchSession(
+    walletAddress: string,
     contentId: string,
     contentTitle: string,
     totalSeconds: number,
-    totalCost: number
+    minutesUsed: number,
+    remainingBalance: number
 ): Promise<WatchSession> {
     const session: WatchSession = {
         contentId,
@@ -212,21 +356,55 @@ export async function endWatchSession(
         startTime: Date.now() - totalSeconds * 1000,
         endTime: Date.now(),
         totalSeconds,
-        totalCost,
+        minutesUsed: parseFloat(minutesUsed.toFixed(2)),
         txHash: "",
-        status: "pending",
+        status: "completed",
+        type: "watch",
     };
 
+    // Update stored minute balance (Supabase + localStorage)
+    setStoredMinuteBalance(walletAddress, remainingBalance);
+
+    // Record transaction in Supabase
+    recordTransaction({
+        wallet_address: walletAddress,
+        type: "watch",
+        content_id: contentId,
+        content_title: contentTitle,
+        minutes_amount: parseFloat(minutesUsed.toFixed(2)),
+        cost_mon: null,
+        tx_hash: null,
+        explorer_url: null,
+        monoracle_contract: null,
+        seconds_watched: totalSeconds,
+        remaining_balance: remainingBalance,
+        status: "completed",
+    }).then((record) => {
+        if (record) {
+            session.txHash = record.id || "RECORDED";
+        }
+    }).catch(console.error);
+
+    // Record on Monoracle (fire-and-forget)
     try {
-        // Send the real on-chain payment
-        const { txHash, explorerUrl } = await sendSessionPayment(totalCost);
-        session.txHash = txHash;
-        session.explorerUrl = explorerUrl;
-        session.status = "completed";
+        const result = await recordWatchSession({
+            walletAddress,
+            contentId,
+            contentTitle,
+            minutesUsed,
+            secondsWatched: totalSeconds,
+            remainingBalance,
+        });
+
+        if (result.success) {
+            session.monoracleContract = result.contractAddress;
+            session.txHash = result.transactionHash || result.contractAddress || "RECORDED";
+        } else {
+            session.txHash = "LOCAL_ONLY";
+        }
     } catch (error) {
-        console.error("Payment failed:", error);
-        session.status = "failed";
-        session.txHash = "FAILED";
+        console.error("Monoracle recording failed:", error);
+        session.txHash = "LOCAL_ONLY";
     }
 
     return session;
@@ -247,6 +425,3 @@ export function onChainChanged(callback: (chainId: string) => void): () => void 
     window.ethereum.on("chainChanged", handler);
     return () => window.ethereum?.removeListener("chainChanged", handler);
 }
-
-export { COST_PER_SECOND };
-

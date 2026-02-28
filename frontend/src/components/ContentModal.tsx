@@ -86,7 +86,7 @@ export default function ContentModal({ content, onClose, onPlay }: ContentModalP
                             <span>{content.duration}</span>
                         </div>
                         <span className="text-[#836ef9] font-mono text-xs bg-[#836ef9]/10 border border-[#836ef9]/30 rounded px-2 py-0.5">
-                            {content.costPerSecond} MON/sec
+                            Dakikalık İzleme
                         </span>
                     </div>
 
@@ -110,12 +110,9 @@ export default function ContentModal({ content, onClose, onPlay }: ContentModalP
                             </span>
                         </div>
                         <p className="text-sm text-white/50">
-                            Pay-per-second streaming. You only pay for what you watch.
-                            This content costs{" "}
-                            <span className="text-[#836ef9] font-mono font-medium">
-                                {content.costPerSecond} MON
-                            </span>{" "}
-                            per second. Payments are processed on Monad Testnet.
+                            Dakikalık izleme sistemi. Sadece izlediğiniz kadar
+                            bakiyenizden düşer. İzlemek için dakika yükleyin,
+                            her dakika izleme = 1 dakika bakiye. Ödemeler Monad Testnet üzerinde işlenir.
                         </p>
                     </div>
                 </div>

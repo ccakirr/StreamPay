@@ -20,11 +20,25 @@ export interface ContentItem {
   videoUrl: string;
   category: string;
   duration: string;
-  costPerSecond: number;
   featured?: boolean;
   year: number;
   match: number;
 }
+
+export interface MinutePackage {
+  id: string;
+  minutes: number;
+  costMON: number;
+  label: string;
+  popular?: boolean;
+}
+
+export const MINUTE_PACKAGES: MinutePackage[] = [
+  { id: "pkg-10", minutes: 10, costMON: 0.01, label: "10 Dakika" },
+  { id: "pkg-30", minutes: 30, costMON: 0.025, label: "30 Dakika", popular: true },
+  { id: "pkg-60", minutes: 60, costMON: 0.04, label: "60 Dakika" },
+  { id: "pkg-120", minutes: 120, costMON: 0.06, label: "120 Dakika" },
+];
 
 export interface ContentCategory {
   name: string;
@@ -41,8 +55,6 @@ const thumbnailColors = [
   "from-violet-900 to-fuchsia-900",
   "from-sky-900 to-blue-900",
 ];
-
-export const COST_PER_SECOND = 0.001; // MON per second
 
 // Free sample videos from Google's public bucket
 const sampleVideos = [
@@ -71,7 +83,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[0],
     category: "Documentary",
     duration: "2h 15m",
-    costPerSecond: COST_PER_SECOND,
     featured: true,
     year: 2026,
     match: 98,
@@ -85,7 +96,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[1],
     category: "Sci-Fi",
     duration: "1h 48m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 95,
   },
@@ -98,7 +108,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[2],
     category: "Thriller",
     duration: "1h 32m",
-    costPerSecond: COST_PER_SECOND,
     year: 2026,
     match: 92,
   },
@@ -111,7 +120,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[3],
     category: "Drama",
     duration: "2h 05m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 88,
   },
@@ -124,7 +132,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[4],
     category: "Action",
     duration: "1h 55m",
-    costPerSecond: COST_PER_SECOND,
     year: 2026,
     match: 94,
   },
@@ -137,7 +144,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[5],
     category: "Drama",
     duration: "1h 40m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 91,
   },
@@ -150,7 +156,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[6],
     category: "Documentary",
     duration: "1h 22m",
-    costPerSecond: COST_PER_SECOND,
     year: 2024,
     match: 87,
   },
@@ -163,7 +168,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[7],
     category: "Thriller",
     duration: "1h 50m",
-    costPerSecond: COST_PER_SECOND,
     year: 2026,
     match: 93,
   },
@@ -176,7 +180,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[8],
     category: "Documentary",
     duration: "1h 35m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 85,
   },
@@ -189,7 +192,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[9],
     category: "Thriller",
     duration: "2h 10m",
-    costPerSecond: COST_PER_SECOND,
     year: 2026,
     match: 96,
   },
@@ -202,7 +204,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[10],
     category: "Animation",
     duration: "1h 28m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 89,
   },
@@ -215,7 +216,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[11],
     category: "Sci-Fi",
     duration: "1h 45m",
-    costPerSecond: COST_PER_SECOND,
     year: 2026,
     match: 90,
   },
@@ -228,7 +228,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[12],
     category: "Drama",
     duration: "2h 00m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 86,
   },
@@ -241,7 +240,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[0],
     category: "Documentary",
     duration: "1h 58m",
-    costPerSecond: COST_PER_SECOND,
     featured: true,
     year: 2026,
     match: 99,
@@ -255,7 +253,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[7],
     category: "Mystery",
     duration: "1h 42m",
-    costPerSecond: COST_PER_SECOND,
     year: 2025,
     match: 92,
   },
@@ -268,7 +265,6 @@ export const allContent: ContentItem[] = [
     videoUrl: sampleVideos[1],
     category: "Action",
     duration: "1h 38m",
-    costPerSecond: COST_PER_SECOND,
     year: 2026,
     match: 94,
   },

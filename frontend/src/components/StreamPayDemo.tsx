@@ -13,30 +13,38 @@ import {
     contentCategories,
     featuredContent,
     allContent,
+    MINUTE_PACKAGES,
 } from "@/lib/mockData";
 import {
     endWatchSession,
+    buyMinutes,
     WatchSession,
     connectWallet,
     disconnectWallet,
     getWalletBalance,
+    getStoredMinuteBalance,
+    loadTransactionsFromDB,
     isMetaMaskInstalled,
     onAccountsChanged,
     onChainChanged,
     MONAD_TESTNET,
 } from "@/lib/web3";
+import BuyMinutesModal from "@/components/BuyMinutesModal";
 import { Wallet, Zap, AlertTriangle, Loader2 } from "lucide-react";
 import Image from "next/image";
 
 export default function StreamPayDemo() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [balance, setBalance] = useState(0);
+    const [walletBalance, setWalletBalance] = useState(0);
+    const [minuteBalance, setMinuteBalance] = useState(0);
     const [walletAddress, setWalletAddress] = useState<string | null>(null);
     const [activeContent, setActiveContent] = useState<ContentItem | null>(null);
     const [sessions, setSessions] = useState<WatchSession[]>([]);
     const [connecting, setConnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [paymentPending, setPaymentPending] = useState(false);
+    const [buyModalOpen, setBuyModalOpen] = useState(false);
 
     // New state for navigation, search, modals
     const [activeView, setActiveView] = useState<ViewType>("home");
@@ -52,10 +60,15 @@ export default function StreamPayDemo() {
                 setIsLoggedIn(false);
                 setWalletAddress(null);
                 setBalance(0);
+                setWalletBalance(0);
+                setMinuteBalance(0);
             } else {
                 setWalletAddress(accounts[0]);
                 const bal = await getWalletBalance(accounts[0]);
-                setBalance(bal);
+                setWalletBalance(bal);
+                const mins = await getStoredMinuteBalance(accounts[0]);
+                setMinuteBalance(mins);
+                setBalance(mins);
             }
         });
 
@@ -108,7 +121,17 @@ export default function StreamPayDemo() {
             }
             const wallet = await connectWallet();
             setWalletAddress(wallet.address);
-            setBalance(wallet.balance);
+            setWalletBalance(wallet.balance);
+            const mins = wallet.address ? await getStoredMinuteBalance(wallet.address) : 0;
+            setMinuteBalance(mins);
+            setBalance(mins);
+            // Load past transactions from Supabase
+            if (wallet.address) {
+                const pastSessions = await loadTransactionsFromDB(wallet.address);
+                if (pastSessions.length > 0) {
+                    setSessions(pastSessions);
+                }
+            }
             setIsLoggedIn(true);
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Failed to connect wallet";
@@ -123,51 +146,85 @@ export default function StreamPayDemo() {
         setIsLoggedIn(false);
         setWalletAddress(null);
         setBalance(0);
+        setWalletBalance(0);
+        setMinuteBalance(0);
         setActiveView("home");
     }, []);
 
     const handlePlay = useCallback(
         (content: ContentItem) => {
-            if (balance <= 0) return;
+            if (minuteBalance <= 0) {
+                setBuyModalOpen(true);
+                return;
+            }
             setActiveContent(content);
         },
-        [balance]
+        [minuteBalance]
     );
 
     const handleBalanceTick = useCallback((newBalance: number) => {
+        setMinuteBalance(Math.max(newBalance, 0));
         setBalance(Math.max(newBalance, 0));
     }, []);
 
     const handleClosePlayer = useCallback(
-        async (totalSeconds: number, totalCost: number) => {
-            if (activeContent && totalSeconds > 0) {
+        async (totalSeconds: number, minutesUsed: number) => {
+            if (activeContent && totalSeconds > 0 && walletAddress) {
                 setPaymentPending(true);
                 try {
+                    const remaining = Math.max(minuteBalance - minutesUsed, 0);
                     const session = await endWatchSession(
+                        walletAddress,
                         activeContent.id,
                         activeContent.title,
                         totalSeconds,
-                        totalCost
+                        minutesUsed,
+                        remaining
                     );
                     setSessions((prev) => [session, ...prev]);
-                    if (walletAddress) {
-                        const newBal = await getWalletBalance(walletAddress);
-                        setBalance(newBal);
-                    }
+                    setMinuteBalance(remaining);
+                    setBalance(remaining);
+                    // Refresh wallet balance
+                    const newWalBal = await getWalletBalance(walletAddress);
+                    setWalletBalance(newWalBal);
                 } catch (err) {
-                    console.error("Session payment error:", err);
+                    console.error("Session recording error:", err);
                 } finally {
                     setPaymentPending(false);
                 }
             }
             setActiveContent(null);
         },
-        [activeContent, walletAddress]
+        [activeContent, walletAddress, minuteBalance]
     );
 
     const handleNavigate = useCallback((view: ViewType) => {
         setActiveView(view);
     }, []);
+
+    const handleBuyMinutes = useCallback(
+        async (pkg: { minutes: number; costMON: number }) => {
+            if (!walletAddress) return;
+            setPaymentPending(true);
+            try {
+                const session = await buyMinutes(walletAddress, pkg.minutes, pkg.costMON);
+                setSessions((prev) => [session, ...prev]);
+                if (session.status === "completed") {
+                    const newMins = await getStoredMinuteBalance(walletAddress);
+                    setMinuteBalance(newMins);
+                    setBalance(newMins);
+                }
+                const newWalBal = await getWalletBalance(walletAddress);
+                setWalletBalance(newWalBal);
+                setBuyModalOpen(false);
+            } catch (err) {
+                console.error("Buy minutes error:", err);
+            } finally {
+                setPaymentPending(false);
+            }
+        },
+        [walletAddress]
+    );
 
     // Login / Connect Wallet Screen
     if (!isLoggedIn) {
@@ -280,6 +337,8 @@ export default function StreamPayDemo() {
         <div className="flex flex-col h-screen bg-[#141414] text-white overflow-hidden">
             <TopBar
                 balance={balance}
+                minuteBalance={minuteBalance}
+                walletBalance={walletBalance}
                 isLoggedIn={isLoggedIn}
                 walletAddress={walletAddress}
                 onLogin={handleLogin}
@@ -288,6 +347,7 @@ export default function StreamPayDemo() {
                 onNavigate={handleNavigate}
                 onSearchOpen={() => setSearchOpen(true)}
                 sessions={sessions}
+                onBuyMinutes={() => setBuyModalOpen(true)}
             />
 
             {/* Main scrollable content */}
@@ -352,7 +412,7 @@ export default function StreamPayDemo() {
                                                         {Math.floor(session.totalSeconds / 60)}m {session.totalSeconds % 60}s watched
                                                     </span>
                                                     <span className="text-[#836ef9] font-mono">
-                                                        -{session.totalCost.toFixed(4)} MON
+                                                        {session.type === "purchase" ? `+${session.minutesUsed} dk` : `-${session.minutesUsed.toFixed(1)} dk`}
                                                     </span>
                                                 </div>
                                             </div>
@@ -387,8 +447,18 @@ export default function StreamPayDemo() {
                 <VideoPlayer
                     content={activeContent}
                     onClose={handleClosePlayer}
-                    balance={balance}
+                    balance={minuteBalance}
                     onBalanceTick={handleBalanceTick}
+                />
+            )}
+
+            {/* Buy Minutes Modal */}
+            {buyModalOpen && (
+                <BuyMinutesModal
+                    onClose={() => setBuyModalOpen(false)}
+                    onBuy={handleBuyMinutes}
+                    walletBalance={walletBalance}
+                    minuteBalance={minuteBalance}
                 />
             )}
 

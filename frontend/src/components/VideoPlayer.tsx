@@ -13,11 +13,11 @@ import {
     SkipBack,
     SkipForward,
 } from "lucide-react";
-import { ContentItem, COST_PER_SECOND } from "@/lib/mockData";
+import { ContentItem } from "@/lib/mockData";
 
 interface VideoPlayerProps {
     content: ContentItem;
-    onClose: (totalSeconds: number, totalCost: number) => void;
+    onClose: (totalSeconds: number, minutesUsed: number) => void;
     balance: number;
     onBalanceTick: (newBalance: number) => void;
 }
@@ -30,7 +30,7 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [secondsWatched, setSecondsWatched] = useState(0);
-    const [sessionCost, setSessionCost] = useState(0);
+    const [minutesUsed, setMinutesUsed] = useState(0);
     const [showControls, setShowControls] = useState(true);
     const [muted, setMuted] = useState(false);
     const [volume, setVolume] = useState(1);
@@ -54,18 +54,16 @@ export default function VideoPlayer({
     useEffect(() => {
         if (isPlaying) {
             intervalRef.current = setInterval(() => {
-                if (balanceRef.current <= COST_PER_SECOND) {
+                const costPerSecond = 1 / 60; // 1 minute per 60 seconds
+                if (balanceRef.current <= costPerSecond) {
                     setIsPlaying(false);
                     videoRef.current?.pause();
                     return;
                 }
                 setSecondsWatched((prev) => prev + 1);
-                setSessionCost((prev) => {
-                    const newCost = parseFloat((prev + COST_PER_SECOND).toFixed(4));
-                    return newCost;
-                });
+                setMinutesUsed((prev) => parseFloat((prev + costPerSecond).toFixed(4)));
                 const newBalance = parseFloat(
-                    (balanceRef.current - COST_PER_SECOND).toFixed(4)
+                    (balanceRef.current - costPerSecond).toFixed(4)
                 );
                 onBalanceTick(newBalance);
             }, 1000);
@@ -120,7 +118,7 @@ export default function VideoPlayer({
     };
 
     const handleTogglePlay = () => {
-        if (!isPlaying && balance <= COST_PER_SECOND) return;
+        if (!isPlaying && balance <= 1 / 60) return;
         const video = videoRef.current;
         if (!video) return;
 
@@ -145,7 +143,7 @@ export default function VideoPlayer({
         if (document.fullscreenElement) {
             document.exitFullscreen();
         }
-        onClose(secondsWatched, sessionCost);
+        onClose(secondsWatched, minutesUsed);
     };
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -206,8 +204,8 @@ export default function VideoPlayer({
     };
 
     const getCostColor = () => {
-        if (sessionCost > 1) return "text-red-400";
-        if (sessionCost > 0.5) return "text-yellow-400";
+        if (minutesUsed > 30) return "text-red-400";
+        if (minutesUsed > 10) return "text-yellow-400";
         return "text-emerald-400";
     };
 
@@ -372,23 +370,23 @@ export default function VideoPlayer({
                         <div className="flex items-center gap-3 bg-black/60 backdrop-blur-sm border border-white/10 rounded-lg px-4 py-2">
                             <div className="text-right">
                                 <div className="text-[10px] text-white/40 uppercase tracking-wider">
-                                    Session Cost
+                                    Kullanılan
                                 </div>
                                 <div
                                     className={`text-lg font-bold font-mono ${getCostColor()} transition-colors`}
                                 >
-                                    {sessionCost.toFixed(4)}
-                                    <span className="text-xs text-white/30 ml-1">MON</span>
+                                    {minutesUsed.toFixed(2)}
+                                    <span className="text-xs text-white/30 ml-1">dk</span>
                                 </div>
                             </div>
                             <div className="w-px h-8 bg-white/10" />
                             <div className="text-right">
                                 <div className="text-[10px] text-white/40 uppercase tracking-wider">
-                                    Balance
+                                    Kalan Bakiye
                                 </div>
                                 <div className="text-sm font-mono text-white/70">
-                                    {balance.toFixed(4)}
-                                    <span className="text-xs text-white/30 ml-1">MON</span>
+                                    {balance.toFixed(2)}
+                                    <span className="text-xs text-white/30 ml-1">dk</span>
                                 </div>
                             </div>
                         </div>
@@ -420,7 +418,7 @@ export default function VideoPlayer({
                             Live Session
                         </span>
                         <span className="text-xs font-mono text-[#836ef9]">
-                            -{COST_PER_SECOND} MON/s
+                            -1 dk/dk
                         </span>
                     </div>
                 </div>
