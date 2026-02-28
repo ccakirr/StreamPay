@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const MONORACLE_BASE_URL = "https://api.monoracle.xyz";
-const MONORACLE_API_KEY =
-    process.env.MONORACLE_API_KEY ||
-    "MA301c22af_0cf9ace226ab6651576408e1c69700e7e71312b89783bddd";
+const MONORACLE_API_KEY = process.env.MONORACLE_API_KEY || "";
 
 // POST - Write data to Monoracle
 export async function POST(request: NextRequest) {
