@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Play, Pause, X, Volume2, Maximize, ArrowLeft } from "lucide-react";
+import {
+    Play,
+    Pause,
+    X,
+    Volume2,
+    VolumeX,
+    Maximize,
+    Minimize,
+    ArrowLeft,
+    SkipBack,
+    SkipForward,
+} from "lucide-react";
 import { ContentItem, COST_PER_SECOND } from "@/lib/mockData";
-import Image from "next/image";
 
 interface VideoPlayerProps {
     content: ContentItem;
@@ -22,6 +32,15 @@ export default function VideoPlayer({
     const [secondsWatched, setSecondsWatched] = useState(0);
     const [sessionCost, setSessionCost] = useState(0);
     const [showControls, setShowControls] = useState(true);
+    const [muted, setMuted] = useState(false);
+    const [volume, setVolume] = useState(1);
+    const [videoProgress, setVideoProgress] = useState(0);
+    const [videoDuration, setVideoDuration] = useState(0);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [videoReady, setVideoReady] = useState(false);
+
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const balanceRef = useRef(balance);
@@ -31,13 +50,13 @@ export default function VideoPlayer({
         balanceRef.current = balance;
     }, [balance]);
 
-    // Session ticker
+    // Session billing ticker
     useEffect(() => {
         if (isPlaying) {
             intervalRef.current = setInterval(() => {
                 if (balanceRef.current <= COST_PER_SECOND) {
-                    // Out of funds
                     setIsPlaying(false);
+                    videoRef.current?.pause();
                     return;
                 }
                 setSecondsWatched((prev) => prev + 1);
@@ -45,7 +64,9 @@ export default function VideoPlayer({
                     const newCost = parseFloat((prev + COST_PER_SECOND).toFixed(4));
                     return newCost;
                 });
-                const newBalance = parseFloat((balanceRef.current - COST_PER_SECOND).toFixed(4));
+                const newBalance = parseFloat(
+                    (balanceRef.current - COST_PER_SECOND).toFixed(4)
+                );
                 onBalanceTick(newBalance);
             }, 1000);
         } else {
@@ -75,31 +96,115 @@ export default function VideoPlayer({
         };
     }, [isPlaying, resetControlsTimer]);
 
-    const handleToggle = () => {
+    // Track fullscreen changes
+    useEffect(() => {
+        const handleFS = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener("fullscreenchange", handleFS);
+        return () => document.removeEventListener("fullscreenchange", handleFS);
+    }, []);
+
+    // Video time update
+    const handleTimeUpdate = () => {
+        if (videoRef.current) {
+            setVideoProgress(videoRef.current.currentTime);
+        }
+    };
+
+    const handleLoadedMetadata = () => {
+        if (videoRef.current) {
+            setVideoDuration(videoRef.current.duration);
+            setVideoReady(true);
+        }
+    };
+
+    const handleTogglePlay = () => {
         if (!isPlaying && balance <= COST_PER_SECOND) return;
-        setIsPlaying(!isPlaying);
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (isPlaying) {
+            video.pause();
+            setIsPlaying(false);
+        } else {
+            video.play().catch(() => {});
+            setIsPlaying(true);
+        }
     };
 
     const handleClose = () => {
         setIsPlaying(false);
+        if (videoRef.current) {
+            videoRef.current.pause();
+        }
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        }
         onClose(secondsWatched, sessionCost);
     };
 
-    const formatTime = (seconds: number): string => {
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = seconds % 60;
-        if (h > 0) {
-            return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const time = parseFloat(e.target.value);
+        if (videoRef.current) {
+            videoRef.current.currentTime = time;
+            setVideoProgress(time);
         }
-        return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
     };
 
-    // Calculate cost display color
+    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const vol = parseFloat(e.target.value);
+        setVolume(vol);
+        setMuted(vol === 0);
+        if (videoRef.current) {
+            videoRef.current.volume = vol;
+            videoRef.current.muted = vol === 0;
+        }
+    };
+
+    const toggleMute = () => {
+        if (videoRef.current) {
+            const newMuted = !muted;
+            videoRef.current.muted = newMuted;
+            setMuted(newMuted);
+        }
+    };
+
+    const toggleFullscreen = () => {
+        if (!containerRef.current) return;
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            containerRef.current.requestFullscreen();
+        }
+    };
+
+    const skip = (seconds: number) => {
+        if (videoRef.current) {
+            videoRef.current.currentTime = Math.max(
+                0,
+                Math.min(videoRef.current.currentTime + seconds, videoDuration)
+            );
+        }
+    };
+
+    const formatTime = (seconds: number): string => {
+        const s = Math.floor(seconds);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (h > 0) {
+            return `${h}:${m.toString().padStart(2, "0")}:${sec
+                .toString()
+                .padStart(2, "0")}`;
+        }
+        return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+    };
+
     const getCostColor = () => {
         if (sessionCost > 1) return "text-red-400";
         if (sessionCost > 0.5) return "text-yellow-400";
@@ -108,49 +213,40 @@ export default function VideoPlayer({
 
     return (
         <div
+            ref={containerRef}
             className="fixed inset-0 z-[100] bg-black"
             onMouseMove={resetControlsTimer}
         >
-            {/* Video Background */}
-            <div className="absolute inset-0">
-                <Image
-                    src={content.image}
-                    alt={content.title}
-                    fill
-                    className="object-cover"
-                    priority
-                    sizes="100vw"
-                />
-                <div className={`absolute inset-0 bg-gradient-to-br ${content.thumbnail} opacity-30`} />
-                <div className="absolute inset-0 overflow-hidden">
-                    {Array.from({ length: 15 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="absolute w-1 h-1 rounded-full bg-white/10"
-                            style={{
-                                left: `${Math.random() * 100}%`,
-                                top: `${Math.random() * 100}%`,
-                                animation: `float ${4 + Math.random() * 4}s ease-in-out infinite`,
-                                animationDelay: `${Math.random() * 3}s`,
-                            }}
-                        />
-                    ))}
-                </div>
-                {isPlaying && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-96 h-96 rounded-full bg-white/5 blur-3xl animate-pulse" />
-                    </div>
-                )}
-            </div>
+            {/* Actual Video Element */}
+            <video
+                ref={videoRef}
+                src={content.videoUrl}
+                className="absolute inset-0 w-full h-full object-contain bg-black"
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onEnded={() => setIsPlaying(false)}
+                playsInline
+                preload="auto"
+            />
 
-            {/* Center Play/Pause (always clickable) */}
+            {/* Loading state */}
+            {!videoReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-12 h-12 border-2 border-[#836ef9] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-white/50 text-sm">Loading video...</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Center Play/Pause (click area) */}
             <button
-                onClick={handleToggle}
+                onClick={handleTogglePlay}
                 className="absolute inset-0 z-10 flex items-center justify-center cursor-pointer"
             >
-                {(!isPlaying || showControls) && (
+                {(!isPlaying || showControls) && videoReady && (
                     <div
-                        className={`w-20 h-20 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:bg-white/20 hover:scale-110 ${
+                        className={`w-20 h-20 rounded-full bg-black/40 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-all duration-300 hover:bg-black/60 hover:scale-110 ${
                             isPlaying ? "opacity-60" : "opacity-100"
                         }`}
                     >
@@ -192,23 +288,31 @@ export default function VideoPlayer({
                     showControls ? "opacity-100" : "opacity-0 pointer-events-none"
                 }`}
             >
-                {/* Progress bar */}
+                {/* Seek bar */}
                 <div className="px-6 mb-2">
-                    <div className="h-1 bg-white/20 rounded-full overflow-hidden group cursor-pointer hover:h-2 transition-all">
-                        <div
-                            className="h-full bg-[#836ef9] rounded-full transition-all duration-1000"
-                            style={{
-                                width: `${Math.min((secondsWatched / 3600) * 100, 100)}%`,
-                            }}
-                        />
-                    </div>
+                    <input
+                        type="range"
+                        min={0}
+                        max={videoDuration || 100}
+                        step={0.1}
+                        value={videoProgress}
+                        onChange={handleSeek}
+                        className="w-full h-1 appearance-none cursor-pointer rounded-full bg-white/20 accent-[#836ef9] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#836ef9] hover:[&::-webkit-slider-thumb]:w-4 hover:[&::-webkit-slider-thumb]:h-4 transition-all"
+                        style={{
+                            background: `linear-gradient(to right, #836ef9 ${
+                                (videoProgress / (videoDuration || 1)) * 100
+                            }%, rgba(255,255,255,0.2) ${
+                                (videoProgress / (videoDuration || 1)) * 100
+                            }%)`,
+                        }}
+                    />
                 </div>
 
                 <div className="flex items-center justify-between px-6 pb-6">
                     {/* Left: Controls */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                         <button
-                            onClick={handleToggle}
+                            onClick={handleTogglePlay}
                             className="text-white hover:text-white/80 transition-colors cursor-pointer"
                         >
                             {isPlaying ? (
@@ -217,33 +321,71 @@ export default function VideoPlayer({
                                 <Play className="h-7 w-7" />
                             )}
                         </button>
-                        <button className="text-white/60 hover:text-white transition-colors cursor-pointer">
-                            <Volume2 className="h-6 w-6" />
+                        <button
+                            onClick={() => skip(-10)}
+                            className="text-white/60 hover:text-white transition-colors cursor-pointer"
+                        >
+                            <SkipBack className="h-5 w-5" />
                         </button>
+                        <button
+                            onClick={() => skip(10)}
+                            className="text-white/60 hover:text-white transition-colors cursor-pointer"
+                        >
+                            <SkipForward className="h-5 w-5" />
+                        </button>
+
+                        {/* Volume */}
+                        <div className="flex items-center gap-2 group/vol">
+                            <button
+                                onClick={toggleMute}
+                                className="text-white/60 hover:text-white transition-colors cursor-pointer"
+                            >
+                                {muted ? (
+                                    <VolumeX className="h-6 w-6" />
+                                ) : (
+                                    <Volume2 className="h-6 w-6" />
+                                )}
+                            </button>
+                            <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={muted ? 0 : volume}
+                                onChange={handleVolumeChange}
+                                className="w-0 group-hover/vol:w-20 transition-all duration-300 h-1 appearance-none cursor-pointer rounded-full bg-white/20 accent-white [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                            />
+                        </div>
+
                         <span className="text-sm text-white/60 font-mono">
-                            {formatTime(secondsWatched)}
+                            {formatTime(videoProgress)} / {formatTime(videoDuration)}
                         </span>
                     </div>
 
                     {/* Center: Title */}
-                    <div className="text-center">
+                    <div className="text-center hidden md:block">
                         <h3 className="text-white font-medium text-sm">{content.title}</h3>
                     </div>
 
-                    {/* Right: Session Cost */}
+                    {/* Right: Session Cost + Fullscreen */}
                     <div className="flex items-center gap-4">
-                        {/* Session cost meter */}
                         <div className="flex items-center gap-3 bg-black/60 backdrop-blur-sm border border-white/10 rounded-lg px-4 py-2">
                             <div className="text-right">
-                                <div className="text-[10px] text-white/40 uppercase tracking-wider">Session Cost</div>
-                                <div className={`text-lg font-bold font-mono ${getCostColor()} transition-colors`}>
+                                <div className="text-[10px] text-white/40 uppercase tracking-wider">
+                                    Session Cost
+                                </div>
+                                <div
+                                    className={`text-lg font-bold font-mono ${getCostColor()} transition-colors`}
+                                >
                                     {sessionCost.toFixed(4)}
                                     <span className="text-xs text-white/30 ml-1">MON</span>
                                 </div>
                             </div>
                             <div className="w-px h-8 bg-white/10" />
                             <div className="text-right">
-                                <div className="text-[10px] text-white/40 uppercase tracking-wider">Balance</div>
+                                <div className="text-[10px] text-white/40 uppercase tracking-wider">
+                                    Balance
+                                </div>
                                 <div className="text-sm font-mono text-white/70">
                                     {balance.toFixed(4)}
                                     <span className="text-xs text-white/30 ml-1">MON</span>
@@ -251,8 +393,15 @@ export default function VideoPlayer({
                             </div>
                         </div>
 
-                        <button className="text-white/60 hover:text-white transition-colors cursor-pointer">
-                            <Maximize className="h-5 w-5" />
+                        <button
+                            onClick={toggleFullscreen}
+                            className="text-white/60 hover:text-white transition-colors cursor-pointer"
+                        >
+                            {isFullscreen ? (
+                                <Minimize className="h-5 w-5" />
+                            ) : (
+                                <Maximize className="h-5 w-5" />
+                            )}
                         </button>
                     </div>
                 </div>
@@ -261,7 +410,11 @@ export default function VideoPlayer({
             {/* Live session indicator */}
             {isPlaying && (
                 <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20">
-                    <div className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-4 py-1.5 border border-white/10 transition-opacity duration-500 ${showControls ? "opacity-100" : "opacity-0"}`}>
+                    <div
+                        className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-4 py-1.5 border border-white/10 transition-opacity duration-500 ${
+                            showControls ? "opacity-100" : "opacity-0"
+                        }`}
+                    >
                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
                         <span className="text-xs font-mono text-white/60 uppercase tracking-wider">
                             Live Session
@@ -272,6 +425,18 @@ export default function VideoPlayer({
                     </div>
                 </div>
             )}
+
+            {/* Session Timer (always visible) */}
+            <div className="absolute top-6 right-6 z-20">
+                <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-white/10">
+                    <div className="text-[10px] text-white/40 uppercase tracking-wider">
+                        Watch Time
+                    </div>
+                    <div className="text-sm font-mono text-white/80">
+                        {formatTime(secondsWatched)}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

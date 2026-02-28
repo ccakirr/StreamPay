@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import TopBar from "@/components/TopBar";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import TopBar, { ViewType } from "@/components/TopBar";
 import HeroSection from "@/components/HeroSection";
 import ContentRow from "@/components/ContentRow";
 import VideoPlayer from "@/components/VideoPlayer";
+import TransactionsPage from "@/components/TransactionsPage";
+import SearchOverlay from "@/components/SearchOverlay";
+import ContentModal from "@/components/ContentModal";
 import {
     ContentItem,
     contentCategories,
     featuredContent,
-    shortenHash,
     allContent,
 } from "@/lib/mockData";
 import {
@@ -23,10 +25,8 @@ import {
     onChainChanged,
     MONAD_TESTNET,
 } from "@/lib/web3";
-import { Wallet, Zap, AlertTriangle, ExternalLink, Loader2 } from "lucide-react";
+import { Wallet, Zap, AlertTriangle, Loader2 } from "lucide-react";
 import Image from "next/image";
-
-const INITIAL_BALANCE = 10;
 
 export default function StreamPayDemo() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -37,6 +37,11 @@ export default function StreamPayDemo() {
     const [connecting, setConnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [paymentPending, setPaymentPending] = useState(false);
+
+    // New state for navigation, search, modals
+    const [activeView, setActiveView] = useState<ViewType>("home");
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [modalContent, setModalContent] = useState<ContentItem | null>(null);
 
     // Listen for account/chain changes
     useEffect(() => {
@@ -55,7 +60,6 @@ export default function StreamPayDemo() {
         });
 
         const unsubChain = onChainChanged(() => {
-            // Reload on chain change
             window.location.reload();
         });
 
@@ -64,6 +68,34 @@ export default function StreamPayDemo() {
             unsubChain();
         };
     }, [isLoggedIn]);
+
+    // Filtered content based on active view
+    const filteredCategories = useMemo(() => {
+        switch (activeView) {
+            case "series":
+                return [
+                    { name: "Sci-Fi Series", items: allContent.filter((c) => c.category === "Sci-Fi") },
+                    { name: "Drama Series", items: allContent.filter((c) => c.category === "Drama") },
+                    { name: "Thriller Series", items: allContent.filter((c) => c.category === "Thriller") },
+                    { name: "All Series", items: allContent.filter((c) => ["Sci-Fi", "Drama", "Thriller", "Mystery"].includes(c.category)) },
+                ];
+            case "films":
+                return [
+                    { name: "Action Films", items: allContent.filter((c) => c.category === "Action") },
+                    { name: "Documentary Films", items: allContent.filter((c) => c.category === "Documentary") },
+                    { name: "Animation", items: allContent.filter((c) => c.category === "Animation") },
+                    { name: "All Films", items: allContent },
+                ];
+            case "new":
+                return [
+                    { name: "New Releases 2026", items: allContent.filter((c) => c.year === 2026) },
+                    { name: "Popular Now", items: allContent.filter((c) => c.match >= 93) },
+                    { name: "Trending", items: [...allContent].sort((a, b) => b.match - a.match) },
+                ];
+            default:
+                return contentCategories;
+        }
+    }, [activeView]);
 
     const handleLogin = useCallback(async () => {
         setError(null);
@@ -91,6 +123,7 @@ export default function StreamPayDemo() {
         setIsLoggedIn(false);
         setWalletAddress(null);
         setBalance(0);
+        setActiveView("home");
     }, []);
 
     const handlePlay = useCallback(
@@ -117,7 +150,6 @@ export default function StreamPayDemo() {
                         totalCost
                     );
                     setSessions((prev) => [session, ...prev]);
-                    // Refresh real balance after payment
                     if (walletAddress) {
                         const newBal = await getWalletBalance(walletAddress);
                         setBalance(newBal);
@@ -133,11 +165,15 @@ export default function StreamPayDemo() {
         [activeContent, walletAddress]
     );
 
+    const handleNavigate = useCallback((view: ViewType) => {
+        setActiveView(view);
+    }, []);
+
     // Login / Connect Wallet Screen
     if (!isLoggedIn) {
         return (
             <div className="fixed inset-0 bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
-                {/* Background montage of content images */}
+                {/* Background montage */}
                 <div className="absolute inset-0">
                     <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1 opacity-15 rotate-[-5deg] scale-110 -translate-y-8">
                         {allContent.concat(allContent).map((item, i) => (
@@ -157,7 +193,6 @@ export default function StreamPayDemo() {
                 </div>
 
                 <div className="relative z-10 flex flex-col items-center gap-8 max-w-md mx-auto px-6">
-                    {/* Logo */}
                     <div className="flex items-center gap-3">
                         <Zap className="h-12 w-12 text-[#836ef9] drop-shadow-[0_0_15px_rgba(131,110,249,0.6)]" />
                         <span className="text-5xl font-bold tracking-tight text-white">
@@ -165,12 +200,10 @@ export default function StreamPayDemo() {
                         </span>
                     </div>
 
-                    {/* Tagline */}
                     <p className="text-white/50 text-center text-lg">
                         Pay only for what you watch. Powered by Monad.
                     </p>
 
-                    {/* Network Info */}
                     <div className="w-full bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm">
                         <div className="flex items-center gap-2 mb-3">
                             <Wallet className="h-4 w-4 text-[#836ef9]" />
@@ -198,7 +231,6 @@ export default function StreamPayDemo() {
                         </div>
                     </div>
 
-                    {/* Error */}
                     {error && (
                         <div className="w-full bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
                             <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -218,7 +250,6 @@ export default function StreamPayDemo() {
                         </div>
                     )}
 
-                    {/* Connect Button */}
                     <button
                         onClick={handleLogin}
                         disabled={connecting}
@@ -253,88 +284,103 @@ export default function StreamPayDemo() {
                 walletAddress={walletAddress}
                 onLogin={handleLogin}
                 onLogout={handleLogout}
+                activeView={activeView}
+                onNavigate={handleNavigate}
+                onSearchOpen={() => setSearchOpen(true)}
+                sessions={sessions}
             />
 
             {/* Main scrollable content */}
             <div id="main-scroll" className="flex-1 overflow-y-auto">
-                {/* Hero */}
-                <HeroSection content={featuredContent} onPlay={handlePlay} />
-
-                {/* Content Rows */}
-                <div className="relative z-10 -mt-16 pb-20">
-                    {contentCategories.map((category) => (
-                        <ContentRow
-                            key={category.name}
-                            title={category.name}
-                            items={category.items}
+                {activeView === "transactions" ? (
+                    <TransactionsPage sessions={sessions} />
+                ) : (
+                    <>
+                        {/* Hero */}
+                        <HeroSection
+                            content={featuredContent}
                             onPlay={handlePlay}
+                            onMoreInfo={(content) => setModalContent(content)}
                         />
-                    ))}
 
-                    {/* Recent Sessions */}
-                    {sessions.length > 0 && (
-                        <div className="px-6 lg:px-12 mt-8">
-                            <h2 className="text-lg font-semibold text-white mb-4">
-                                Recent Watch Sessions
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {sessions.slice(0, 6).map((session, i) => (
-                                    <div
-                                        key={`${session.txHash}-${i}`}
-                                        className={`border rounded-lg p-4 space-y-2 ${
-                                            session.status === "failed"
-                                                ? "bg-red-500/5 border-red-500/20"
-                                                : session.status === "pending"
-                                                ? "bg-yellow-500/5 border-yellow-500/20"
-                                                : "bg-white/5 border-white/10"
-                                        }`}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium text-white">
-                                                {session.contentTitle}
-                                            </span>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                                                session.status === "completed"
-                                                    ? "bg-emerald-500/20 text-emerald-400"
-                                                    : session.status === "pending"
-                                                    ? "bg-yellow-500/20 text-yellow-400 animate-pulse"
-                                                    : "bg-red-500/20 text-red-400"
-                                            }`}>
-                                                {session.status === "completed" ? "Confirmed" : session.status === "pending" ? "Pending..." : "Failed"}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-4 text-xs text-white/50">
-                                            <span>
-                                                {Math.floor(session.totalSeconds / 60)}m {session.totalSeconds % 60}s watched
-                                            </span>
-                                            <span className="text-[#836ef9] font-mono">
-                                                -{session.totalCost.toFixed(4)} MON
-                                            </span>
-                                        </div>
-                                        {session.txHash && session.txHash !== "FAILED" && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-mono text-white/20">
-                                                    TX: {shortenHash(session.txHash)}
-                                                </span>
-                                                {session.explorerUrl && (
-                                                    <a
-                                                        href={session.explorerUrl}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-[#836ef9] hover:text-[#836ef9]/80 transition-colors"
-                                                    >
-                                                        <ExternalLink className="h-3 w-3" />
-                                                    </a>
-                                                )}
+                        {/* Content Rows */}
+                        <div className="relative z-10 -mt-16 pb-20">
+                            {filteredCategories.map((category) => (
+                                <ContentRow
+                                    key={category.name}
+                                    title={category.name}
+                                    items={category.items}
+                                    onPlay={handlePlay}
+                                />
+                            ))}
+
+                            {/* Recent Sessions (only on home view) */}
+                            {activeView === "home" && sessions.length > 0 && (
+                                <div className="px-6 lg:px-12 mt-8">
+                                    <h2 className="text-lg font-semibold text-white mb-4">
+                                        Recent Watch Sessions
+                                    </h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {sessions.slice(0, 6).map((session, i) => (
+                                            <div
+                                                key={`${session.txHash}-${i}`}
+                                                className={`border rounded-lg p-4 space-y-2 cursor-pointer hover:bg-white/[0.03] transition-colors ${
+                                                    session.status === "failed"
+                                                        ? "bg-red-500/5 border-red-500/20"
+                                                        : session.status === "pending"
+                                                        ? "bg-yellow-500/5 border-yellow-500/20"
+                                                        : "bg-white/5 border-white/10"
+                                                }`}
+                                                onClick={() => setActiveView("transactions")}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm font-medium text-white">
+                                                        {session.contentTitle}
+                                                    </span>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                                                        session.status === "completed"
+                                                            ? "bg-emerald-500/20 text-emerald-400"
+                                                            : session.status === "pending"
+                                                            ? "bg-yellow-500/20 text-yellow-400 animate-pulse"
+                                                            : "bg-red-500/20 text-red-400"
+                                                    }`}>
+                                                        {session.status === "completed" ? "Confirmed" : session.status === "pending" ? "Pending..." : "Failed"}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-4 text-xs text-white/50">
+                                                    <span>
+                                                        {Math.floor(session.totalSeconds / 60)}m {session.totalSeconds % 60}s watched
+                                                    </span>
+                                                    <span className="text-[#836ef9] font-mono">
+                                                        -{session.totalCost.toFixed(4)} MON
+                                                    </span>
+                                                </div>
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    </>
+                )}
             </div>
+
+            {/* Search Overlay */}
+            {searchOpen && (
+                <SearchOverlay
+                    onClose={() => setSearchOpen(false)}
+                    onPlay={handlePlay}
+                />
+            )}
+
+            {/* Content Info Modal */}
+            {modalContent && (
+                <ContentModal
+                    content={modalContent}
+                    onClose={() => setModalContent(null)}
+                    onPlay={handlePlay}
+                />
+            )}
 
             {/* Video Player Overlay */}
             {activeContent && (

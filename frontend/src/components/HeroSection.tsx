@@ -7,9 +7,10 @@ import Image from "next/image";
 interface HeroSectionProps {
     content: ContentItem;
     onPlay: (content: ContentItem) => void;
+    onMoreInfo: (content: ContentItem) => void;
 }
 
-export default function HeroSection({ content, onPlay }: HeroSectionProps) {
+export default function HeroSection({ content, onPlay, onMoreInfo }: HeroSectionProps) {
     return (
         <div className="relative w-full h-[85vh] min-h-[500px]">
             {/* Background Image */}
@@ -73,7 +74,9 @@ export default function HeroSection({ content, onPlay }: HeroSectionProps) {
                             <Play className="h-6 w-6 fill-black" />
                             Play
                         </button>
-                        <button className="flex items-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-sm text-white font-semibold rounded hover:bg-white/30 transition-all duration-200 cursor-pointer text-lg">
+                        <button className="flex items-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-sm text-white font-semibold rounded hover:bg-white/30 transition-all duration-200 cursor-pointer text-lg"
+                            onClick={() => onMoreInfo(content)}
+                        >
                             <Info className="h-6 w-6" />
                             More Info
                         </button>

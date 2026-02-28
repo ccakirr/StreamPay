@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Zap, Search, Bell, ChevronDown, Wallet } from "lucide-react";
+import { Zap, Search, Bell, ChevronDown, Wallet, Clock, ExternalLink } from "lucide-react";
+import { WatchSession } from "@/lib/web3";
+import { shortenHash } from "@/lib/mockData";
+
+export type ViewType = "home" | "series" | "films" | "new" | "transactions";
 
 interface TopBarProps {
     balance: number;
@@ -9,12 +13,28 @@ interface TopBarProps {
     walletAddress: string | null;
     onLogin: () => void;
     onLogout: () => void;
+    activeView: ViewType;
+    onNavigate: (view: ViewType) => void;
+    onSearchOpen: () => void;
+    sessions: WatchSession[];
 }
 
-export default function TopBar({ balance, isLoggedIn, walletAddress, onLogin, onLogout }: TopBarProps) {
+export default function TopBar({
+    balance,
+    isLoggedIn,
+    walletAddress,
+    onLogin,
+    onLogout,
+    activeView,
+    onNavigate,
+    onSearchOpen,
+    sessions,
+}: TopBarProps) {
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [notifOpen, setNotifOpen] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
+    const notifRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -33,12 +53,23 @@ export default function TopBar({ balance, isLoggedIn, walletAddress, onLogin, on
             if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
                 setProfileOpen(false);
             }
+            if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+                setNotifOpen(false);
+            }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const navItems = ["Home", "Series", "Films", "New & Popular"];
+    const navItems: { label: string; view: ViewType }[] = [
+        { label: "Home", view: "home" },
+        { label: "Series", view: "series" },
+        { label: "Films", view: "films" },
+        { label: "New & Popular", view: "new" },
+        { label: "Transactions", view: "transactions" },
+    ];
+
+    const recentSessions = sessions.slice(0, 5);
 
     return (
         <header
@@ -51,7 +82,10 @@ export default function TopBar({ balance, isLoggedIn, walletAddress, onLogin, on
             <div className="flex items-center justify-between px-6 lg:px-12 py-3">
                 {/* Left: Logo + Nav */}
                 <div className="flex items-center gap-8">
-                    <div className="flex items-center gap-2 cursor-pointer">
+                    <div
+                        className="flex items-center gap-2 cursor-pointer"
+                        onClick={() => onNavigate("home")}
+                    >
                         <Zap className="h-7 w-7 text-[#836ef9] drop-shadow-[0_0_8px_rgba(131,110,249,0.6)]" />
                         <span className="text-2xl font-bold tracking-tight text-white">
                             Stream<span className="text-[#836ef9]">Pay</span>
@@ -59,16 +93,17 @@ export default function TopBar({ balance, isLoggedIn, walletAddress, onLogin, on
                     </div>
                     {isLoggedIn && (
                         <nav className="hidden md:flex items-center gap-5">
-                            {navItems.map((item, i) => (
+                            {navItems.map((item) => (
                                 <button
-                                    key={item}
+                                    key={item.view}
+                                    onClick={() => onNavigate(item.view)}
                                     className={`text-sm transition-colors duration-200 cursor-pointer ${
-                                        i === 0
+                                        activeView === item.view
                                             ? "text-white font-semibold"
                                             : "text-white/70 hover:text-white/90"
                                     }`}
                                 >
-                                    {item}
+                                    {item.label}
                                 </button>
                             ))}
                         </nav>
@@ -79,12 +114,84 @@ export default function TopBar({ balance, isLoggedIn, walletAddress, onLogin, on
                 <div className="flex items-center gap-4">
                     {isLoggedIn ? (
                         <>
-                            <button className="text-white/70 hover:text-white transition-colors cursor-pointer">
+                            <button
+                                onClick={onSearchOpen}
+                                className="text-white/70 hover:text-white transition-colors cursor-pointer"
+                            >
                                 <Search className="h-5 w-5" />
                             </button>
-                            <button className="text-white/70 hover:text-white transition-colors cursor-pointer relative">
-                                <Bell className="h-5 w-5" />
-                            </button>
+
+                            {/* Notifications Bell */}
+                            <div className="relative" ref={notifRef}>
+                                <button
+                                    onClick={() => setNotifOpen(!notifOpen)}
+                                    className="text-white/70 hover:text-white transition-colors cursor-pointer relative"
+                                >
+                                    <Bell className="h-5 w-5" />
+                                    {recentSessions.length > 0 && (
+                                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" />
+                                    )}
+                                </button>
+
+                                {notifOpen && (
+                                    <div className="absolute right-0 top-10 w-72 bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-md shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="px-4 py-3 border-b border-white/10">
+                                            <span className="text-sm font-medium text-white">
+                                                Recent Activity
+                                            </span>
+                                        </div>
+                                        {recentSessions.length === 0 ? (
+                                            <div className="px-4 py-6 text-center">
+                                                <p className="text-xs text-white/30">
+                                                    No recent activity
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="max-h-64 overflow-y-auto">
+                                                {recentSessions.map((session, i) => (
+                                                    <div
+                                                        key={`notif-${session.txHash}-${i}`}
+                                                        className="px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors"
+                                                    >
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-xs font-medium text-white truncate">
+                                                                {session.contentTitle}
+                                                            </span>
+                                                            <span className="text-[10px] text-[#836ef9] font-mono flex-shrink-0 ml-2">
+                                                                -{session.totalCost.toFixed(3)} MON
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-[10px] text-white/30">
+                                                            <Clock className="h-2.5 w-2.5" />
+                                                            <span>
+                                                                {Math.floor(session.totalSeconds / 60)}m{" "}
+                                                                {session.totalSeconds % 60}s
+                                                            </span>
+                                                            {session.txHash && session.txHash !== "FAILED" && (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span className="font-mono">
+                                                                        {shortenHash(session.txHash)}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                onNavigate("transactions");
+                                                setNotifOpen(false);
+                                            }}
+                                            className="w-full px-4 py-2.5 text-xs text-[#836ef9] hover:bg-white/5 transition-colors cursor-pointer text-center"
+                                        >
+                                            View All Transactions
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Profile Dropdown */}
                             <div className="relative" ref={profileRef}>
@@ -130,6 +237,15 @@ export default function TopBar({ balance, isLoggedIn, walletAddress, onLogin, on
                                             </div>
                                         </div>
                                         <div className="p-2">
+                                            <button
+                                                onClick={() => {
+                                                    onNavigate("transactions");
+                                                    setProfileOpen(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded transition-colors cursor-pointer"
+                                            >
+                                                Transactions
+                                            </button>
                                             <button className="w-full text-left px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded transition-colors cursor-pointer">
                                                 Monad Testnet
                                             </button>
