@@ -176,6 +176,12 @@ export async function connectWallet(): Promise<WalletState> {
         throw new Error("MetaMask is not installed. Please install MetaMask to use StreamPay.");
     }
 
+    // Force MetaMask to show account picker every time
+    await window.ethereum.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+    });
+
     const accounts = (await window.ethereum.request({
         method: "eth_requestAccounts",
     })) as string[];

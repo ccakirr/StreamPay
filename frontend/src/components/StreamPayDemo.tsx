@@ -34,7 +34,7 @@ import {
 } from "@/lib/web3";
 import BuyMinutesModal from "@/components/BuyMinutesModal";
 import RegisterModal from "@/components/RegisterModal";
-import { Wallet, Zap, AlertTriangle, Loader2 } from "lucide-react";
+import { Wallet, Zap, AlertTriangle, Loader2, X } from "lucide-react";
 import Image from "next/image";
 
 export default function StreamPayDemo() {
@@ -51,6 +51,7 @@ export default function StreamPayDemo() {
     const [buyModalOpen, setBuyModalOpen] = useState(false);
     const [showRegister, setShowRegister] = useState(false);
     const [displayName, setDisplayName] = useState<string | null>(null);
+    const [walletWarning, setWalletWarning] = useState(false);
 
     // New state for navigation, search, modals
     const [activeView, setActiveView] = useState<ViewType>("home");
@@ -171,13 +172,17 @@ export default function StreamPayDemo() {
 
     const handlePlay = useCallback(
         (content: ContentItem) => {
+            if (!isLoggedIn || !walletAddress) {
+                setWalletWarning(true);
+                return;
+            }
             if (minuteBalance <= 0) {
                 setBuyModalOpen(true);
                 return;
             }
             setActiveContent(content);
         },
-        [minuteBalance]
+        [minuteBalance, isLoggedIn, walletAddress]
     );
 
     const handleBalanceTick = useCallback((newBalance: number) => {
@@ -267,113 +272,6 @@ export default function StreamPayDemo() {
     const handleSkipRegister = useCallback(() => {
         setShowRegister(false);
     }, []);
-
-    // Login / Connect Wallet Screen
-    if (!isLoggedIn) {
-        return (
-            <div className="fixed inset-0 bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
-                {/* Background montage */}
-                <div className="absolute inset-0">
-                    <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1 opacity-15 rotate-[-5deg] scale-110 -translate-y-8">
-                        {allContent.concat(allContent).map((item, i) => (
-                            <div key={`bg-${i}`} className="aspect-video relative overflow-hidden rounded">
-                                <Image
-                                    src={item.image}
-                                    alt=""
-                                    fill
-                                    className="object-cover"
-                                    sizes="200px"
-                                />
-                            </div>
-                        ))}
-                    </div>
-                    <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0a0a0a]/80 to-[#0a0a0a]" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0a]/90 via-transparent to-[#0a0a0a]/90" />
-                </div>
-
-                <div className="relative z-10 flex flex-col items-center gap-8 max-w-md mx-auto px-6">
-                    <div className="flex items-center gap-3">
-                        <Zap className="h-12 w-12 text-[#836ef9] drop-shadow-[0_0_15px_rgba(131,110,249,0.6)]" />
-                        <span className="text-5xl font-bold tracking-tight text-white">
-                            Stream<span className="text-[#836ef9]">Pay</span>
-                        </span>
-                    </div>
-
-                    <p className="text-white/50 text-center text-lg">
-                        Pay only for what you watch. Powered by Monad.
-                    </p>
-
-                    <div className="w-full bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Wallet className="h-4 w-4 text-[#836ef9]" />
-                            <span className="text-xs text-white/40 uppercase tracking-wider">
-                                Monad Testnet
-                            </span>
-                        </div>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex items-center justify-between">
-                                <span className="text-white/40">Network</span>
-                                <span className="text-white/70 font-mono text-xs">Monad Testnet</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-white/40">Chain ID</span>
-                                <span className="text-white/70 font-mono text-xs">{MONAD_TESTNET.chainIdDecimal}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-white/40">Currency</span>
-                                <span className="text-white/70 font-mono text-xs">MON</span>
-                            </div>
-                        </div>
-                        <div className="mt-3 flex items-center gap-2 text-xs text-white/30">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            Live on Monad Testnet
-                        </div>
-                    </div>
-
-                    {error && (
-                        <div className="w-full bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
-                            <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm text-red-300">{error}</p>
-                                {!isMetaMaskInstalled() && (
-                                    <a
-                                        href="https://metamask.io/download/"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-[#836ef9] hover:underline mt-1 inline-block"
-                                    >
-                                        Install MetaMask →
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    <button
-                        onClick={handleLogin}
-                        disabled={connecting}
-                        className="w-full py-4 bg-[#836ef9] hover:bg-[#7258e8] disabled:opacity-50 disabled:cursor-not-allowed text-white text-lg font-semibold rounded-lg transition-all duration-300 cursor-pointer shadow-[0_0_30px_rgba(131,110,249,0.3)] hover:shadow-[0_0_50px_rgba(131,110,249,0.5)] flex items-center justify-center gap-3"
-                    >
-                        {connecting ? (
-                            <>
-                                <Loader2 className="h-5 w-5 animate-spin" />
-                                Connecting...
-                            </>
-                        ) : (
-                            <>
-                                <Wallet className="h-5 w-5" />
-                                Connect MetaMask
-                            </>
-                        )}
-                    </button>
-
-                    <p className="text-xs text-white/20 text-center">
-                        Connects to Monad Testnet. Real on-chain transactions.
-                    </p>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="flex flex-col h-screen bg-[#141414] text-white overflow-hidden">
@@ -512,6 +410,53 @@ export default function StreamPayDemo() {
                     onRegister={handleRegister}
                     onSkip={handleSkipRegister}
                 />
+            )}
+
+            {/* Wallet Warning Modal */}
+            {walletWarning && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                        onClick={() => setWalletWarning(false)}
+                    />
+                    <div className="relative w-full max-w-sm bg-[#181818] rounded-xl overflow-hidden shadow-2xl border border-white/10 p-6 text-center space-y-4">
+                        <button
+                            onClick={() => setWalletWarning(false)}
+                            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                            <X className="h-4 w-4 text-white" />
+                        </button>
+                        <div className="w-14 h-14 rounded-full bg-[#836ef9]/20 flex items-center justify-center mx-auto">
+                            <Wallet className="h-7 w-7 text-[#836ef9]" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-white">
+                            Cüzdan Bağlayın
+                        </h3>
+                        <p className="text-sm text-white/50">
+                            İçerik izlemek için önce cüzdanınızı bağlamanız gerekiyor.
+                        </p>
+                        <button
+                            onClick={() => {
+                                setWalletWarning(false);
+                                handleLogin();
+                            }}
+                            disabled={connecting}
+                            className="w-full py-3 bg-[#836ef9] hover:bg-[#7258e8] disabled:opacity-50 text-white font-semibold rounded-lg transition-all duration-300 cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            {connecting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Bağlanıyor...
+                                </>
+                            ) : (
+                                <>
+                                    <Wallet className="h-4 w-4" />
+                                    Connect Wallet
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
             )}
 
             {/* Payment Pending Overlay */}

@@ -157,6 +157,15 @@
   }
 }
 
+@keyframes intro-glow-pulse {
+  0%, 100% {
+    text-shadow: 0 0 7px #00ff41, 0 0 10px #00ff41, 0 0 21px #00ff41, 0 0 42px #00ff41;
+  }
+  50% {
+    text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41, 0 0 40px #00ff41, 0 0 80px #00ff41, 0 0 120px #00ff41;
+  }
+}
+
 /* Hide scrollbar for content rows */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;

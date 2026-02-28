@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 import { Zap, Search, Bell, ChevronDown, Wallet, Clock, ExternalLink, Plus, Timer } from "lucide-react";
 import { WatchSession } from "@/lib/web3";
 import { shortenHash } from "@/lib/mockData";
@@ -95,27 +96,28 @@ export default function TopBar({
                         onClick={() => onNavigate("home")}
                     >
                         <Zap className="h-7 w-7 text-[#836ef9] drop-shadow-[0_0_8px_rgba(131,110,249,0.6)]" />
-                        <span className="text-2xl font-bold tracking-tight text-white">
+                        <motion.span
+                            layoutId="streampay-logo"
+                            className="text-2xl font-bold tracking-tight text-white font-mono"
+                        >
                             Stream<span className="text-[#836ef9]">Pay</span>
-                        </span>
+                        </motion.span>
                     </div>
-                    {isLoggedIn && (
-                        <nav className="hidden md:flex items-center gap-5">
-                            {navItems.map((item) => (
-                                <button
-                                    key={item.view}
-                                    onClick={() => onNavigate(item.view)}
-                                    className={`text-sm transition-colors duration-200 cursor-pointer ${
-                                        activeView === item.view
-                                            ? "text-white font-semibold"
-                                            : "text-white/70 hover:text-white/90"
-                                    }`}
-                                >
-                                    {item.label}
-                                </button>
-                            ))}
-                        </nav>
-                    )}
+                    <nav className="hidden md:flex items-center gap-5">
+                        {navItems.filter(item => item.view !== "transactions" || isLoggedIn).map((item) => (
+                            <button
+                                key={item.view}
+                                onClick={() => onNavigate(item.view)}
+                                className={`text-sm transition-colors duration-200 cursor-pointer ${
+                                    activeView === item.view
+                                        ? "text-white font-semibold"
+                                        : "text-white/70 hover:text-white/90"
+                                }`}
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+                    </nav>
                 </div>
 
                 {/* Right: Actions */}
