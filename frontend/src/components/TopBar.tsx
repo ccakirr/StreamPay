@@ -13,6 +13,7 @@ interface TopBarProps {
     walletBalance: number;
     isLoggedIn: boolean;
     walletAddress: string | null;
+    displayName?: string | null;
     onLogin: () => void;
     onLogout: () => void;
     activeView: ViewType;
@@ -28,6 +29,7 @@ export default function TopBar({
     walletBalance,
     isLoggedIn,
     walletAddress,
+    displayName,
     onLogin,
     onLogout,
     activeView,
@@ -224,8 +226,13 @@ export default function TopBar({
                                     className="flex items-center gap-2 cursor-pointer group"
                                 >
                                     <div className="w-8 h-8 rounded bg-gradient-to-br from-[#836ef9] to-[#6246ea] flex items-center justify-center text-white text-sm font-bold">
-                                        {walletAddress ? walletAddress.slice(2, 4).toUpperCase() : "M"}
+                                        {displayName ? displayName.charAt(0).toUpperCase() : walletAddress ? walletAddress.slice(2, 4).toUpperCase() : "M"}
                                     </div>
+                                    {displayName && (
+                                        <span className="hidden lg:block text-sm text-white/70 max-w-[100px] truncate">
+                                            {displayName}
+                                        </span>
+                                    )}
                                     <ChevronDown
                                         className={`h-4 w-4 text-white/60 transition-transform duration-200 ${
                                             profileOpen ? "rotate-180" : ""
@@ -236,6 +243,11 @@ export default function TopBar({
                                 {profileOpen && (
                                     <div className="absolute right-0 top-12 w-56 bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-md shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                                         <div className="p-4 border-b border-white/10">
+                                            {displayName && (
+                                                <div className="text-sm font-semibold text-white mb-2">
+                                                    {displayName}
+                                                </div>
+                                            )}
                                             <div className="flex items-center gap-2 mb-2">
                                                 <Wallet className="h-4 w-4 text-[#836ef9]" />
                                                 <span className="text-xs text-white/50 uppercase tracking-wider">

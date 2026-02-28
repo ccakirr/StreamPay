@@ -1,15 +1,21 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Check if Supabase is configured
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+
+export const supabase = isSupabaseConfigured
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
 // ─── Types ───
 
 export interface UserBalance {
     wallet_address: string;
     minute_balance: number;
+    display_name: string | null;
     updated_at: string;
 }
 
@@ -30,23 +36,114 @@ export interface TransactionRecord {
     created_at?: string;
 }
 
+// ─── User Profile Functions ───
+
+/**
+ * Check if a user exists in Supabase (first-time check).
+ */
+export async function checkUserExists(walletAddress: string): Promise<boolean> {
+    if (!supabase) return false;
+    const addr = walletAddress.toLowerCase();
+
+    try {
+        const { data, error } = await supabase
+            .from("user_balances")
+            .select("wallet_address")
+            .eq("wallet_address", addr)
+            .maybeSingle();
+
+        if (error) {
+            console.error("Supabase checkUserExists error:", error);
+            return false;
+        }
+        return !!data;
+    } catch (err) {
+        console.error("checkUserExists failed:", err);
+        return false;
+    }
+}
+
+/**
+ * Get user display name from Supabase.
+ */
+export async function getUserDisplayName(walletAddress: string): Promise<string | null> {
+    if (!supabase) return null;
+    const addr = walletAddress.toLowerCase();
+
+    try {
+        const { data, error } = await supabase
+            .from("user_balances")
+            .select("display_name")
+            .eq("wallet_address", addr)
+            .maybeSingle();
+
+        if (error || !data) return null;
+        return data.display_name;
+    } catch (err) {
+        console.error("getUserDisplayName failed:", err);
+        return null;
+    }
+}
+
+/**
+ * Register a new user with display name.
+ */
+export async function registerUser(
+    walletAddress: string,
+    displayName: string
+): Promise<boolean> {
+    if (!supabase) return false;
+    const addr = walletAddress.toLowerCase();
+
+    try {
+        const { error } = await supabase.from("user_balances").upsert(
+            {
+                wallet_address: addr,
+                display_name: displayName.trim(),
+                minute_balance: 0,
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: "wallet_address" }
+        );
+
+        if (error) {
+            console.error("Supabase registerUser error:", error);
+            return false;
+        }
+        return true;
+    } catch (err) {
+        console.error("registerUser failed:", err);
+        return false;
+    }
+}
+
 // ─── Balance Functions ───
 
 /**
  * Get minute balance for a wallet from Supabase.
+ * Uses maybeSingle() to avoid 406 error when user doesn't exist yet.
  * Falls back to 0 if not found.
  */
 export async function getMinuteBalance(walletAddress: string): Promise<number> {
+    if (!supabase) return 0;
     const addr = walletAddress.toLowerCase();
 
-    const { data, error } = await supabase
-        .from("user_balances")
-        .select("minute_balance")
-        .eq("wallet_address", addr)
-        .single();
+    try {
+        const { data, error } = await supabase
+            .from("user_balances")
+            .select("minute_balance")
+            .eq("wallet_address", addr)
+            .maybeSingle();
 
-    if (error || !data) return 0;
-    return data.minute_balance;
+        if (error) {
+            console.error("Supabase getMinuteBalance error:", error);
+            return 0;
+        }
+        return data?.minute_balance ?? 0;
+    } catch (err) {
+        console.error("getMinuteBalance failed:", err);
+        return 0;
+    }
 }
 
 /**
@@ -56,16 +153,25 @@ export async function setMinuteBalance(
     walletAddress: string,
     minutes: number
 ): Promise<void> {
+    if (!supabase) return;
     const addr = walletAddress.toLowerCase();
 
-    await supabase.from("user_balances").upsert(
-        {
-            wallet_address: addr,
-            minute_balance: parseFloat(minutes.toFixed(4)),
-            updated_at: new Date().toISOString(),
-        },
-        { onConflict: "wallet_address" }
-    );
+    try {
+        const { error } = await supabase.from("user_balances").upsert(
+            {
+                wallet_address: addr,
+                minute_balance: parseFloat(minutes.toFixed(4)),
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: "wallet_address" }
+        );
+
+        if (error) {
+            console.error("Supabase setMinuteBalance error:", error);
+        }
+    } catch (err) {
+        console.error("setMinuteBalance failed:", err);
+    }
 }
 
 /**
@@ -109,20 +215,27 @@ export async function deductMinutesFromBalance(
 export async function recordTransaction(
     tx: Omit<TransactionRecord, "id" | "created_at">
 ): Promise<TransactionRecord | null> {
-    const { data, error } = await supabase
-        .from("transactions")
-        .insert({
-            ...tx,
-            wallet_address: tx.wallet_address.toLowerCase(),
-        })
-        .select()
-        .single();
+    if (!supabase) return null;
 
-    if (error) {
-        console.error("Supabase recordTransaction error:", error);
+    try {
+        const { data, error } = await supabase
+            .from("transactions")
+            .insert({
+                ...tx,
+                wallet_address: tx.wallet_address.toLowerCase(),
+            })
+            .select()
+            .maybeSingle();
+
+        if (error) {
+            console.error("Supabase recordTransaction error:", error);
+            return null;
+        }
+        return data;
+    } catch (err) {
+        console.error("recordTransaction failed:", err);
         return null;
     }
-    return data;
 }
 
 /**
@@ -132,18 +245,24 @@ export async function getTransactions(
     walletAddress: string,
     limit: number = 50
 ): Promise<TransactionRecord[]> {
+    if (!supabase) return [];
     const addr = walletAddress.toLowerCase();
 
-    const { data, error } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("wallet_address", addr)
-        .order("created_at", { ascending: false })
-        .limit(limit);
+    try {
+        const { data, error } = await supabase
+            .from("transactions")
+            .select("*")
+            .eq("wallet_address", addr)
+            .order("created_at", { ascending: false })
+            .limit(limit);
 
-    if (error) {
-        console.error("Supabase getTransactions error:", error);
+        if (error) {
+            console.error("Supabase getTransactions error:", error);
+            return [];
+        }
+        return data || [];
+    } catch (err) {
+        console.error("getTransactions failed:", err);
         return [];
     }
-    return data || [];
 }

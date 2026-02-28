@@ -4,9 +4,13 @@
 -- 1. User Balances Table
 CREATE TABLE IF NOT EXISTS user_balances (
     wallet_address TEXT PRIMARY KEY,
+    display_name TEXT,
     minute_balance NUMERIC(12, 4) NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Add display_name column if table already exists
+ALTER TABLE user_balances ADD COLUMN IF NOT EXISTS display_name TEXT;
 
 -- 2. Transactions Table
 CREATE TABLE IF NOT EXISTS transactions (

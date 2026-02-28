@@ -6,6 +6,9 @@ import {
     addMinutesToBalance,
     recordTransaction,
     getTransactions,
+    checkUserExists,
+    getUserDisplayName,
+    registerUser,
     type TransactionRecord,
 } from "./supabase";
 
@@ -243,21 +246,51 @@ export async function buyMinutesOnChain(
     costMON: number
 ): Promise<{ txHash: string; explorerUrl: string }> {
     if (!window.ethereum) {
-        throw new Error("MetaMask not found");
+        throw new Error("MetaMask bulunamadı. Lütfen MetaMask yükleyin.");
     }
 
     const provider = new BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    // Check if wallet address is the same as contract address
+    if (signerAddress.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
+        throw new Error(
+            "Cüzdan adresiniz kontrat adresiyle aynı. Lütfen farklı bir cüzdan kullanın."
+        );
+    }
+
     const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-    const amountWei = parseEther(costMON.toFixed(18));
-    const tx = await contract.pay({ value: amountWei });
-    const receipt = await tx.wait();
+    try {
+        const amountWei = parseEther(costMON.toFixed(18));
+        const tx = await contract.pay({ value: amountWei });
+        const receipt = await tx.wait();
 
-    const txHash = receipt.hash;
-    const explorerUrl = `${MONAD_TESTNET.blockExplorerUrls[0]}/tx/${txHash}`;
+        const txHash = receipt.hash;
+        const explorerUrl = `${MONAD_TESTNET.blockExplorerUrls[0]}/tx/${txHash}`;
 
-    return { txHash, explorerUrl };
+        return { txHash, explorerUrl };
+    } catch (error: unknown) {
+        // Parse MetaMask / RPC errors for user-friendly messages
+        const err = error as { code?: number; message?: string; info?: { error?: { message?: string } } };
+        
+        if (err.code === 4001 || err.message?.includes("user rejected")) {
+            throw new Error("İşlem iptal edildi.");
+        }
+        if (err.message?.includes("insufficient funds")) {
+            throw new Error("Yetersiz MON bakiye. Cüzdanınıza MON yükleyin.");
+        }
+        if (err.message?.includes("internal accounts")) {
+            throw new Error(
+                "MetaMask hatası: Bu cüzdan kontrat ile uyumsuz. Farklı bir cüzdan deneyin."
+            );
+        }
+        if (err.info?.error?.message) {
+            throw new Error(`İşlem hatası: ${err.info.error.message}`);
+        }
+        throw error;
+    }
 }
 
 /**
@@ -331,6 +364,8 @@ export async function buyMinutes(
         console.error("Buy minutes failed:", error);
         session.status = "failed";
         session.txHash = "FAILED";
+        // Re-throw so the UI can show the error message
+        throw error;
     }
 
     return session;
@@ -425,3 +460,6 @@ export function onChainChanged(callback: (chainId: string) => void): () => void 
     window.ethereum.on("chainChanged", handler);
     return () => window.ethereum?.removeListener("chainChanged", handler);
 }
+
+// Re-export user profile functions from supabase
+export { checkUserExists, getUserDisplayName, registerUser } from "./supabase";

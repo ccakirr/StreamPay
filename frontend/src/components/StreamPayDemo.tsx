@@ -27,9 +27,13 @@ import {
     isMetaMaskInstalled,
     onAccountsChanged,
     onChainChanged,
+    checkUserExists,
+    getUserDisplayName,
+    registerUser,
     MONAD_TESTNET,
 } from "@/lib/web3";
 import BuyMinutesModal from "@/components/BuyMinutesModal";
+import RegisterModal from "@/components/RegisterModal";
 import { Wallet, Zap, AlertTriangle, Loader2 } from "lucide-react";
 import Image from "next/image";
 
@@ -45,6 +49,8 @@ export default function StreamPayDemo() {
     const [error, setError] = useState<string | null>(null);
     const [paymentPending, setPaymentPending] = useState(false);
     const [buyModalOpen, setBuyModalOpen] = useState(false);
+    const [showRegister, setShowRegister] = useState(false);
+    const [displayName, setDisplayName] = useState<string | null>(null);
 
     // New state for navigation, search, modals
     const [activeView, setActiveView] = useState<ViewType>("home");
@@ -115,7 +121,7 @@ export default function StreamPayDemo() {
         setConnecting(true);
         try {
             if (!isMetaMaskInstalled()) {
-                setError("MetaMask is not installed. Please install MetaMask to continue.");
+                setError("MetaMask yüklü değil. Lütfen MetaMask yükleyin.");
                 setConnecting(false);
                 return;
             }
@@ -131,10 +137,22 @@ export default function StreamPayDemo() {
                 if (pastSessions.length > 0) {
                     setSessions(pastSessions);
                 }
+                // Check if first-time user
+                const exists = await checkUserExists(wallet.address);
+                if (!exists) {
+                    // Show registration modal
+                    setIsLoggedIn(true);
+                    setShowRegister(true);
+                    return;
+                } else {
+                    // Load display name
+                    const name = await getUserDisplayName(wallet.address);
+                    if (name) setDisplayName(name);
+                }
             }
             setIsLoggedIn(true);
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : "Failed to connect wallet";
+            const message = err instanceof Error ? err.message : "Cüzdan bağlantısı başarısız";
             setError(message);
         } finally {
             setConnecting(false);
@@ -206,6 +224,7 @@ export default function StreamPayDemo() {
         async (pkg: { minutes: number; costMON: number }) => {
             if (!walletAddress) return;
             setPaymentPending(true);
+            setError(null);
             try {
                 const session = await buyMinutes(walletAddress, pkg.minutes, pkg.costMON);
                 setSessions((prev) => [session, ...prev]);
@@ -218,13 +237,36 @@ export default function StreamPayDemo() {
                 setWalletBalance(newWalBal);
                 setBuyModalOpen(false);
             } catch (err) {
+                const message = err instanceof Error ? err.message : "İşlem başarısız oldu";
+                setError(message);
                 console.error("Buy minutes error:", err);
+                // Don't close modal so user can retry
             } finally {
                 setPaymentPending(false);
             }
         },
         [walletAddress]
     );
+
+    const handleRegister = useCallback(
+        async (name: string) => {
+            if (!walletAddress) return;
+            const success = await registerUser(walletAddress, name);
+            if (success) {
+                setDisplayName(name);
+                setShowRegister(false);
+            } else {
+                // Still dismiss on failure — localStorage name as fallback
+                setDisplayName(name);
+                setShowRegister(false);
+            }
+        },
+        [walletAddress]
+    );
+
+    const handleSkipRegister = useCallback(() => {
+        setShowRegister(false);
+    }, []);
 
     // Login / Connect Wallet Screen
     if (!isLoggedIn) {
@@ -341,6 +383,7 @@ export default function StreamPayDemo() {
                 walletBalance={walletBalance}
                 isLoggedIn={isLoggedIn}
                 walletAddress={walletAddress}
+                displayName={displayName}
                 onLogin={handleLogin}
                 onLogout={handleLogout}
                 activeView={activeView}
@@ -459,6 +502,15 @@ export default function StreamPayDemo() {
                     onBuy={handleBuyMinutes}
                     walletBalance={walletBalance}
                     minuteBalance={minuteBalance}
+                />
+            )}
+
+            {/* Register Modal (first-time users) */}
+            {showRegister && walletAddress && (
+                <RegisterModal
+                    walletAddress={walletAddress}
+                    onRegister={handleRegister}
+                    onSkip={handleSkipRegister}
                 />
             )}
 
